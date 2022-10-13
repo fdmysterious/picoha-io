@@ -1,0 +1,3 @@
+# Aarvark Pico Clone Host Adapter
+KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05e1", ATTRS{product}=="Aardvark_Pico_Clone", GROUP="dialout", MODE="0666", SYMLINK+="ttyXPicoClone%n"
+# More option: udevadm info -a /dev/ttyXPicoClone0

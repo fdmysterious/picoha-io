@@ -1,0 +1,21 @@
+{
+    "machine": "test",
+    "brokers": {
+        "test_broker": {
+            "addr": "localhost",
+            "port": 1883,
+            "interfaces": [
+                {
+                    "name": "led",
+                    "driver": "picoha_io",
+                    "settings": {
+                        "gpio_id": 25,
+                        "polling_time_ms": 10000,
+                        "usbid_vendor": "16c0",
+                        "usbid_product": "05e1"
+                    }
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,4 @@
+doxygen:
+  output_latex: false
+  output_pdf: false
+

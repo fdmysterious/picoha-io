@@ -1,0 +1,3 @@
+cargo:rustc-link-search=/work/target/thumbv6m-none-eabi/release/build/rp2040-pac-d7561971c994eb99/out
+cargo:rerun-if-changed=device.x
+cargo:rerun-if-changed=build.rs

@@ -1,0 +1,13 @@
+{
+    "local_test": {
+        "url": "localhost",
+        "port": 1883,
+        "interfaces": {
+            "pico_led": "pza/test/picoha_io/led",
+            "io_test": "pza/test/picoha_io/io_test",
+            "io_in": "pza/test/picoha_io/io_in",
+            "io_out": "pza/test/picoha_io/io_out"
+        }
+    }
+}
+
