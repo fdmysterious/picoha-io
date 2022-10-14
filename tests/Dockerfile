@@ -9,6 +9,7 @@ RUN pip install PyHamcrest
 RUN pip install coverage
 RUN pip install loguru
 RUN pip install paho-mqtt
+RUN pip install python-magic
 RUN pip install behave-html-formatter
 
 ENV PYTHONPATH="/work/panduza-py-platform:/work/panduza-py"

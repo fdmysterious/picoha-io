@@ -1,7 +1,0 @@
-cargo:rustc-link-lib=static=cortex-m-rt
-cargo:rerun-if-changed=bin/thumbv6m-none-eabi.a
-cargo:rustc-cfg=cortex_m
-cargo:rustc-cfg=armv6m
-cargo:rustc-link-search=/work/target/thumbv6m-none-eabi/release/build/cortex-m-rt-e159e99b11956f4d/out
-cargo:rerun-if-changed=build.rs
-cargo:rerun-if-changed=link.x.in

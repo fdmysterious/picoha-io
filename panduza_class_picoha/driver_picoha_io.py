@@ -4,7 +4,7 @@ import base64
 import pyudev
 import serial
 import threading
-from loguru import self.log
+from loguru import logger
 from panduza_platform import MetaDriverIo
 from statemachine import StateMachine, State
 
@@ -20,9 +20,13 @@ def TTYPortfromUsbInfo(vendor_id, product_id, serial=None, base_dev_tty="/dev/tt
     """
     # Explore usb device with tty subsystem
     udev_context = pyudev.Context()
-    for device in udev_context.list_devices(ID_BUS='usb', SUBSYSTEM='tty'):
+    # for device in udev_context.list_devices(ID_BUS='usb', SUBSYSTEM='tty'):
+    for device in udev_context.list_devices(SUBSYSTEM='tty'):
         properties = dict(device.properties)
         
+        #
+        # logger.debug(f"{properties}")
+
         # Need to find the one with the DEVNAME corresponding to the /dev serial port
         if 'DEVNAME' not in properties or not properties['DEVNAME'].startswith(base_dev_tty):
             continue
@@ -62,15 +66,17 @@ class PicohaBridge:
     ###########################################################################
     ###########################################################################
     
-    def __init__(self, vendor_id, product_id, serial=None):
+    def __init__(self, parent_driver, vendor_id, product_id, serial=None):
         """Constructor
         """
+        self.parent_driver = parent_driver
         self.usbid_vendor = vendor_id
         self.usbid_product = product_id
         self.usbid_serial = serial
         self.start_time = time.time()
         self.fsm = PicohaBridgeMachine()
         self.mutex = threading.Lock()
+        self.log = logger.bind(driver_name="PicohaBridge")
 
     ###########################################################################
     ###########################################################################
@@ -89,6 +95,12 @@ class PicohaBridge:
         # Try to initialize the serial object
         try:
             self.serial_obj = serial.Serial(self.serial_port, timeout=2)
+            
+            req = { "cod": 10, "pin": 0, "arg": 0 }
+            self.serial_obj.write( (json.dumps(req) + "\n") .encode() )
+            line = self.serial_obj.readline()
+            self.log.debug(f" Connected to pico probe : {line}")
+
         except serial.serialutil.SerialException:
             self.log.error(f"serial cannot be initialized !")
             self.fsm.init_fail()
@@ -106,10 +118,16 @@ class PicohaBridge:
         """
         # Communication test sequence
         try:
-            req = { "cod": 10, "pin": 0, "arg": 0 }
+            
+            req = { "cod": 2, "pin": self.parent_driver.gpio_id, "arg": 0 }
             self.serial_obj.write( (json.dumps(req) + "\n") .encode() )
             line = self.serial_obj.readline()
-            # self.log.debug(f"{line}")
+            self.log.debug(f"RX : {line}")
+
+
+            
+
+
         except serial.serialutil.SerialException as e:
             self.log.error(f"adapter unreachable !")
             self.fsm.runtine_error()
@@ -167,9 +185,10 @@ class PicohaBridge:
         try:
             # COD:0 => set pin mode
             req = { "cod": 0, "pin": gpio_id, "arg": dval }
+            self.log.debug(f"req => {req}")
             self.serial_obj.write( (json.dumps(req) + "\n") .encode() )
-            ans = self.serial_obj.readline()
-            # self.log.debug(f"{ans}")
+            ret = self.serial_obj.readline()
+            self.log.debug(f"ret => {ret}")
         except serial.serialutil.SerialException as e:
             self.log.error(f"adapter unreachable !")
             self.fsm.runtine_error()
@@ -195,9 +214,10 @@ class PicohaBridge:
         try:
             # COD:1 => wrtie pin value
             req = { "cod": 1, "pin": gpio_id, "arg": value }
+            self.log.debug(f"req => {req}")
             self.serial_obj.write( (json.dumps(req) + "\n") .encode() )
-            ans = self.serial_obj.readline()
-            # self.log.debug(f"{ans}")
+            ret = self.serial_obj.readline()
+            self.log.debug(f"ret => {ret}")
         except serial.serialutil.SerialException as e:
             self.log.error(f"adapter unreachable !")
             self.fsm.runtine_error()
@@ -246,6 +266,8 @@ class DriverPicohaIO(MetaDriverIo):
         """
         # Initialize properties
         self.gpio_id = -1
+        self.gpio_dir = 'out'
+        self.gpio_val = 0
         self.polling_time_ms = 1000
         self.usbid_vendor = "16c0"
         self.usbid_product = "05e1"
@@ -274,7 +296,7 @@ class DriverPicohaIO(MetaDriverIo):
         self.register_command("direction/set", self.__direction_set)
 
         # Init the bridge
-        DriverPicohaIO.Bridges[usb_uuid] = PicohaBridge(self.usbid_vendor, self.usbid_product, self.usbid_serial)
+        DriverPicohaIO.Bridges[usb_uuid] = PicohaBridge(self, self.usbid_vendor, self.usbid_product, self.usbid_serial)
         self.bridge = DriverPicohaIO.Bridges[usb_uuid]
 
     ###########################################################################

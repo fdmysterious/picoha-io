@@ -24,7 +24,7 @@ use rp_pico::hal::pac;
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
 use rp_pico::hal;
-use rp_pico::hal::gpio::dynpin::DynPin;
+// use rp_pico::hal::gpio::dynpin::DynPin;
 
 // USB Device support
 use usb_device::{class_prelude::*, prelude::*};

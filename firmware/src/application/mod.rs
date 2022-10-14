@@ -11,6 +11,7 @@ pub const SIZE_ANS_BUFFER: usize = 400;
 use embedded_hal::digital::v2::OutputPin;
 use rp_pico::hal;
 use rp_pico::hal::gpio::dynpin::DynPin;
+use embedded_hal::digital::v2::InputPin;
 
 // USB crates
 use usb_device::prelude::UsbDevice;
@@ -165,7 +166,7 @@ impl PicohaIo {
         // Send ack
         if !error
         {
-            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: 0, arg: 0, msg: "" });
+            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "m" });
         }
     }
 
@@ -203,7 +204,7 @@ impl PicohaIo {
         // Send ack
         if !error
         {
-            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: 0, arg: 0, msg: "" });
+            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "w" });
         }
     }
 
@@ -216,11 +217,13 @@ impl PicohaIo {
         let idx = self.map_ios[cmd.pin as usize];
         let io = &mut self.dyn_ios[idx];
 
-        // if(io.is_high().unwrap()) {
+        if io.is_high().unwrap() {
+            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 1, msg: "r" });
+        } else {
+            self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "r" });
+        }
 
-        // } else {
-
-        // }
+        // self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "r" });
     }
 
     // ------------------------------------------------------------------------
@@ -230,6 +233,16 @@ impl PicohaIo {
     pub fn run_forever(&mut self) -> ! {
         let mut cmd_buffer = [0u8; 1024];
 
+        // Show to the user that the app has booted
+        // {
+        //     let led = &mut self.dyn_ios[23];
+        //     led.into_readable_output();
+        //     led.set_high();
+        // }
+
+        self.dyn_ios[0].into_pull_down_input();
+
+        // Main loop
         loop {
 
             match self.usb_buffer.get_command(&mut cmd_buffer) {

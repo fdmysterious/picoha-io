@@ -1,1 +1,0 @@
-/work/target/thumbv6m-none-eabi/release/aardvark-rp2040-clone: /work/src/application/buffer.rs /work/src/application/mod.rs /work/src/application/panic.rs /work/src/application/usbctrl.rs /work/src/main.rs /work/src/platform/config.rs /work/src/platform/mod.rs
