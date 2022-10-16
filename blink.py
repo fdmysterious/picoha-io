@@ -31,27 +31,37 @@ Core.LoadAliases(
             "port": 1883,
             "interfaces": {
                 "pico_led": "pza/test/picoha_io/led",
-                "test": "pza/test/picoha_io/test"
+                "test": "pza/test/picoha_io/test",
+                "test_out": "pza/test/picoha_io/test_out"
             }
         }
     }
 )
 
 
-io_led = Io(alias="pico_led")
-io_led.direction.set("out", ensure=True)
+# io_led = Io(alias="pico_led")
+# io_led.direction.set("out", ensure=True)
 
-io_led.value.set(0, ensure=True)
-time.sleep(1)
-io_led.value.set(1, ensure=True)
-time.sleep(1)
-io_led.value.set(0, ensure=True)
-time.sleep(1)
-io_led.value.set(1, ensure=True)
+# io_led.value.set(0, ensure=True)
+# time.sleep(1)
+# io_led.value.set(1, ensure=True)
+# time.sleep(1)
+# io_led.value.set(0, ensure=True)
+# time.sleep(1)
+# io_led.value.set(1, ensure=True)
 
 
-io_led = Io(alias="test")
-io_led.direction.set("in", ensure=True)
+io_in = Io(alias="test")
+io_in.direction.set("in", ensure=True)
 
-print( io_led.value.get() )
+io_out = Io(alias="test_out")
+io_out.direction.set("out", ensure=True)
+
+io_out.value.set(1, ensure=True)
+time.sleep(2)
+print( io_in.value.get() ) # need wait for value operation
+
+io_out.value.set(0, ensure=True)
+time.sleep(2)
+print( io_in.value.get() )
 
