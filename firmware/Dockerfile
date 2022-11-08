@@ -1,25 +1,28 @@
-FROM ubuntu:22.04
+FROM rust:bullseye
 
-# Install Packages
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive TZ=Europe/Paris \
-    apt-get -y install \
-    build-essential \
-    curl \
-    pkg-config \
-    libudev-dev
+# Arguments
+ARG SERIALGID=20 # GID of group used to access serial devices
 
-# Create a tmp setup dir
-WORKDIR /setup
+RUN apt-get update -y
+RUN apt-get install -y sudo
 
-# Install rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Tools
+RUN apt-get install -y build-essential pkg-config
 
-# Update path to end rust installation
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Dev. dependencies
+RUN apt-get install -y libudev-dev
 
-# Install target specifics
+# Create dev. user
+RUN delgroup dialout
+RUN addgroup dialout --gid ${SERIALGID}
+RUN adduser builder
+RUN usermod -aG dialout builder
+
+# Install toolchain
 RUN rustup target install thumbv6m-none-eabi
-RUN cargo install elf2uf2-rs
 
-# Create the workspace
-WORKDIR /work
+# Install various tools
+USER builder
+ENV CARGO_HOME=/home/builder/.cargo
+RUN cargo install elf2uf2-rs
+RUN cargo install cargo-generate
