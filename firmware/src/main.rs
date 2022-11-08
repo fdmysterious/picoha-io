@@ -4,9 +4,6 @@
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
-// The macro for marking our interrupt functions
-use rp_pico::hal::pac::interrupt;
-
 // Time handling traits
 use embedded_time::rate::*;
 
@@ -27,10 +24,10 @@ use rp_pico::hal;
 // use rp_pico::hal::gpio::dynpin::DynPin;
 
 // USB Device support
-use usb_device::{class_prelude::*, prelude::*};
+use usb_device::class_prelude::*;
 
-// USB Communications Class Device support
-use usbd_serial::SerialPort;
+// To use pin control stuff
+//use embedded_hal::digital::v2::OutputPin;
 
 // ============================================================================
 
@@ -40,14 +37,14 @@ mod platform;
 // ============================================================================
 
 /// Application object
-static mut APP_INSTANCE: Option<application::PicohaIo> = None;
-
-/// USB bus allocator
-static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
-/// USB device object
-static mut USB_DEVICE: Option<UsbDevice<hal::usb::UsbBus>> = None;
-/// USB serial object
-static mut USB_SERIAL: Option<SerialPort<hal::usb::UsbBus>> = None;
+//static mut APP_INSTANCE: Option<application::PicohaIo> = None;
+//
+///// USB bus allocator
+//static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
+///// USB device object
+//static mut USB_DEVICE: Option<UsbDevice<hal::usb::UsbBus>> = None;
+///// USB serial object
+//static mut USB_SERIAL: Option<SerialPort<hal::usb::UsbBus>> = None;
 
 // ============================================================================
 
@@ -59,10 +56,10 @@ static mut USB_SERIAL: Option<SerialPort<hal::usb::UsbBus>> = None;
 /// The function configures the RP2040 peripherals, then blinks the LED in an
 /// infinite loop.
 #[entry]
-unsafe fn main() -> ! {
+fn main() -> ! {
     // Grab our singleton objects
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
+    let mut pac  = pac::Peripherals::take().unwrap();
+    let     core = pac::CorePeripherals::take().unwrap();
 
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
@@ -90,24 +87,9 @@ unsafe fn main() -> ! {
         true,
         &mut pac.RESETS,
     ));
-    // Note (safety): This is safe as interrupts haven't been started yet
-    USB_BUS = Some(usb_bus);
 
-    // Grab a reference to the USB Bus allocator. We are promising to the
-    // compiler not to take mutable access to this global variable whilst this
-    // reference exists!
-    let bus_ref = USB_BUS.as_ref().unwrap();
-
-    USB_SERIAL = Some(platform::init_usb_serial(bus_ref));
-    USB_DEVICE = Some(platform::init_usb_device(bus_ref));
-
-    // Enable the USB interrupt
-    pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-
-    //
-    // No more USB code after this point in main! We can do anything we want in
-    // here since USB is handled in the interrupt
-    //
+    let mut usb_serial = platform::init_usb_serial(&usb_bus);
+    let mut usb_device = platform::init_usb_device(&usb_bus);
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
@@ -120,8 +102,8 @@ unsafe fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    // Init the application and start it
-    APP_INSTANCE = Some(application::PicohaIo::new(
+    // Init. the app
+    let mut app = application::PicohaIo::new(
         cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
         [
             pins.gpio0.into(),
@@ -159,13 +141,39 @@ unsafe fn main() -> ! {
             255, 255,  // 23 and 24 are not available
             23, 24, 25 // adapt last indexes
         ],
-        USB_DEVICE.as_mut().unwrap(),
-        USB_SERIAL.as_mut().unwrap(),
-    ));
+    );
 
-    // Run the application
-    let app = APP_INSTANCE.as_mut().unwrap();
-    app.run_forever();
+    // Run the app
+    let mut ans_buffer = [0u8; 1024];
+    loop {
+        // Update USB
+        if usb_device.poll(&mut [&mut usb_serial]) {
+            let mut buf = [0u8; 1024];
+            match usb_serial.read(&mut buf) {
+                Err(_) => {}
+                Ok(0)  => {}
+
+                Ok(count) => {
+                    app.feed_cmd_buffer(&buf, count);
+                }
+            }
+        }
+
+        // Update app command process
+        match app.update_command_processing() {
+            None           => {},
+            Some(response) => {
+                match serde_json_core::to_slice(&response, &mut ans_buffer) {
+                    Ok(size) => {
+                        ans_buffer[size] = '\n' as u8;
+                        usb_serial.write(&ans_buffer[0..(size+1)]).unwrap();
+                    }
+
+                    Err(_) => {} // Ignore errors for now
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -175,12 +183,13 @@ unsafe fn main() -> ! {
 ///
 /// We do all our USB work under interrupt, so the main thread can continue on
 /// knowing nothing about USB.
-#[allow(non_snake_case)]
-#[interrupt]
-unsafe fn USBCTRL_IRQ() {
-    let app = APP_INSTANCE.as_mut().unwrap();
-    app.usbctrl_irq();
-}
+//#[allow(non_snake_case)]
+//#[interrupt]
+//unsafe fn USBCTRL_IRQ() {
+//    //let app = APP_INSTANCE.as_mut().unwrap();
+//    //app.usbctrl_irq();
+//    USBIT_FLAG.store(true, Ordering::SeqCst);
+//}
 
 // ============================================================================
 
@@ -188,8 +197,24 @@ unsafe fn USBCTRL_IRQ() {
 use core::panic::PanicInfo;
 #[panic_handler]
 unsafe fn panic(_info: &PanicInfo) -> ! {
-    let app = APP_INSTANCE.as_mut().unwrap();
-    app.panic_handler(_info);
+    //let mut tmp_buf = [0u8; 20];
+
+    //self.usb_serial.write(b"{\"log\":\"").ok();
+    //self.usb_serial.write(b"PANIC! => ").ok();
+    //self.usb_serial
+    //    .write(_info.location().unwrap().file().as_bytes())
+    //    .ok();
+    //self.usb_serial.write(b":").ok();
+    //self.usb_serial
+    //    .write(_info.location().unwrap().line().numtoa(10, &mut tmp_buf))
+    //    .ok();
+    //self.usb_serial.write(b"\"}\r\n").ok();
+    loop {
+        // self.led_pin.set_high().ok();
+        // self.delay.delay_ms(100);
+        // self.led_pin.set_low().ok();
+        // self.delay.delay_ms(100);
+    }
 }
 
 // ============================================================================

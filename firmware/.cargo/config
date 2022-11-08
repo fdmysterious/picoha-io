@@ -13,6 +13,10 @@
 # Set the default target to match the Cortex-M0+ in the RP2040
 target = "thumbv6m-none-eabi"
 
+[env]
+USB_SERIAL_NUMBER="TEST_123456789"
+USB_PRODUCT_NAME="picoha-io"
+
 # Target specific options
 [target.thumbv6m-none-eabi]
 # Pass some extra options to rustc, some of which get passed on to the linker.
