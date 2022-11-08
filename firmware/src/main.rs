@@ -4,9 +4,6 @@
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
-// The macro for marking our interrupt functions
-use rp_pico::hal::pac::interrupt;
-
 // Time handling traits
 use embedded_time::rate::*;
 
@@ -27,17 +24,10 @@ use rp_pico::hal;
 // use rp_pico::hal::gpio::dynpin::DynPin;
 
 // USB Device support
-use usb_device::{class_prelude::*, prelude::*};
-
-// USB Communications Class Device support
-use usbd_serial::SerialPort;
-
-use hal::prelude::*;
+use usb_device::class_prelude::*;
 
 // To use pin control stuff
-use embedded_hal::digital::v2::OutputPin;
-
-use heapless::String;
+//use embedded_hal::digital::v2::OutputPin;
 
 // ============================================================================
 
@@ -207,9 +197,24 @@ fn main() -> ! {
 use core::panic::PanicInfo;
 #[panic_handler]
 unsafe fn panic(_info: &PanicInfo) -> ! {
-    //let app = APP_INSTANCE.as_mut().unwrap();
-    //app.panic_handler(_info);
-    loop{}
+    //let mut tmp_buf = [0u8; 20];
+
+    //self.usb_serial.write(b"{\"log\":\"").ok();
+    //self.usb_serial.write(b"PANIC! => ").ok();
+    //self.usb_serial
+    //    .write(_info.location().unwrap().file().as_bytes())
+    //    .ok();
+    //self.usb_serial.write(b":").ok();
+    //self.usb_serial
+    //    .write(_info.location().unwrap().line().numtoa(10, &mut tmp_buf))
+    //    .ok();
+    //self.usb_serial.write(b"\"}\r\n").ok();
+    loop {
+        // self.led_pin.set_high().ok();
+        // self.delay.delay_ms(100);
+        // self.led_pin.set_low().ok();
+        // self.delay.delay_ms(100);
+    }
 }
 
 // ============================================================================

@@ -4,9 +4,6 @@
 pub const NB_IO_RP2040: usize = 27;
 pub const MAX_IO_INDEX_RP2040: usize = 28;
 
-/// Size of the answer buffer, used to convert answer message into a json string
-pub const SIZE_ANS_BUFFER: usize = 400;
-
 /// Max message string length in answer
 pub const MAX_MSG_SIZE: usize = 128;
 
@@ -19,10 +16,6 @@ use rp_pico::hal::gpio::dynpin::DynPin;
 use embedded_hal::digital::v2::InputPin;
 
 // Algos
-use numtoa::NumToA;
-use arrayvec::ArrayString;
-
-
 use heapless::String;
 use core::str::FromStr;
 use core::write;
@@ -115,6 +108,8 @@ impl PicohaIo {
         }
     }
 
+    // -----------------------------------------------------------------------
+
     fn cmd_pin_set_io(io: &mut DynPin, mode: u8) -> Result<(), CmdError> {
         match mode {
             // Pull up input
@@ -139,8 +134,6 @@ impl PicohaIo {
         }
     }
 
-    // ------------------------------------------------------------------------
-
     /// To configure the  mode of the io
     ///
     fn process_set_io_mode(&mut self, cmd: &Command) -> Answer {
@@ -152,7 +145,7 @@ impl PicohaIo {
         match Self::cmd_pin_set_io(io, cmd.arg) {
             Ok(())             => Answer {sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: AnswerText::from_str("m").unwrap()},
             Err(err) => match err {
-                CmdError::HalError(x) => Answer{
+                CmdError::HalError(_) => Answer{
                     sts: AnsStatus::Error as u8,
                     pin: 0,
                     arg: 0,
@@ -178,12 +171,12 @@ impl PicohaIo {
 
     fn cmd_pin_set_value(io: &mut DynPin, value: u8) -> Result<(), CmdError> {
         match value {
-            0 => match io.set_high() {
-                Err(e) => Err(CmdError::HalError((e))),
+            1 => match io.set_high() {
+                Err(e) => Err(CmdError::HalError(e)),
                 Ok(_)  => Ok(()),
             },
 
-            1 => match io.set_low() {
+            0 => match io.set_low() {
                 Err(e) => Err(CmdError::HalError(e)),
                 Ok(_) => Ok(()),
             },
@@ -199,16 +192,13 @@ impl PicohaIo {
         let idx = self.map_ios[cmd.pin as usize];
         let io = &mut self.dyn_ios[idx];
 
-        // error flag
-        let mut error: bool = false;
-
         // Process the argument
         match Self::cmd_pin_set_value(io, cmd.arg) {
             Ok(())             => Answer {sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: AnswerText::from_str("m").unwrap()},
             Err(err) => match err {
-                CmdError::HalError(x) => Answer{
+                CmdError::HalError(_) => Answer{
                     sts: AnsStatus::Error as u8,
-                    pin: 0,
+                    pin: cmd.pin,
                     arg: 0,
                     msg: AnswerText::from_str("Cannot set desired pin value. Is direction correct?").unwrap(),
                 },
@@ -219,7 +209,7 @@ impl PicohaIo {
 
                     return Answer {
                         sts: AnsStatus::Error as u8,
-                        pin: 0,
+                        pin: cmd.pin,
                         arg: 0,
                         msg: txt
                     };
@@ -230,21 +220,35 @@ impl PicohaIo {
 
     // ------------------------------------------------------------------------
 
+    fn cmd_pin_get_value(io: &mut DynPin) -> Result<bool, CmdError> {
+        match io.is_high() {
+            Err(e) => Err(CmdError::HalError(e)),
+            Ok(v) => Ok(v)
+        }
+    }
+
     /// To read an io
-    ///
-    //fn process_read_io(&mut self, cmd: &Command) {
-    //    // Get io from cmd
-    //    let idx = self.map_ios[cmd.pin as usize];
-    //    let io = &mut self.dyn_ios[idx];
+    fn process_read_io(&mut self, cmd: &Command) -> Answer {
+        // Get io from cmd
+        let idx = self.map_ios[cmd.pin as usize];
+        let io  = &mut self.dyn_ios[idx];
 
-    //    if io.is_high().unwrap() {
-    //        self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 1, msg: "r" });
-    //    } else {
-    //        self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "r" });
-    //    }
+        match Self::cmd_pin_get_value(io) {
+            Ok(v) => Answer {
+                sts: AnsStatus::Ok as u8,
+                pin: cmd.pin,
+                arg: match v { true => 1, false => 0},
+                msg: AnswerText::from_str("r").unwrap(),
+            },
 
-    //    // self.send_answer(&Answer{ sts: AnsStatus::Ok as u8, pin: cmd.pin, arg: 0, msg: "r" });
-    //}
+            Err(_) => Answer {
+                sts: AnsStatus::Error as u8,
+                pin: cmd.pin,
+                arg: 0,
+                msg: AnswerText::from_str("Cannot read pin value. Is direction correct?").unwrap()
+            }
+        }
+    }
 
     // ------------------------------------------------------------------------
 
@@ -273,7 +277,7 @@ impl PicohaIo {
                         match data.cod {
                             0  => Some(self.process_set_io_mode(data)),
                             1  => Some(self.process_write_io(data)),
-                            //2  => self.process_read_io(data),
+                            2  => Some(self.process_read_io(data)),
 
                             10 => Some(Answer{
                                 sts: AnsStatus::Ok as u8,
@@ -300,12 +304,11 @@ impl PicohaIo {
         }
     }
 
+    // ------------------------------------------------------------------------
+
     /// Feed input buffer
     ///
     pub fn feed_cmd_buffer(&mut self, buf: &[u8], count: usize) {
         self.usb_buffer.load(buf, count);
     }
 }
-
-// Method Implementations
-mod panic;

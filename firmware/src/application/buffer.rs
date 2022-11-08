@@ -1,9 +1,6 @@
-use rp_pico::hal;
-use rp_pico::hal::pac;
-
 // ============================================================================
 
-/// Buffer to manage usb data (safe with usb interrupts)
+/// Simple buffer to handle incoming data
 pub struct UsbBuffer<const CAPACITY: usize> {
     // atomic bool mutex
     buffer: [u8; CAPACITY],

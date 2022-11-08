@@ -24,7 +24,7 @@ pub fn init_usb_device(usb_bus: &UsbBusAllocator<UsbBus>) -> UsbDevice<UsbBus> {
         UsbVidPid(config::USB_MANUFACTURER_ID, config::USB_PRODUCT_ID),
     )
     .manufacturer(config::USB_MANUFACTURER_NAME)
-    .product(config::USB_PRODUCT_NAME)
+    .product(env!("USB_PRODUCT_NAME"))
     //.serial_number(config::USB_SERIAL_NUMBER)
     .serial_number(env!("USB_SERIAL_NUMBER"))
     .device_class(USB_CLASS_CDC) // from: https://www.usb.org/defined-class-codes
