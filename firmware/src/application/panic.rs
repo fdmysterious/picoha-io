@@ -23,18 +23,18 @@ impl PicohaIo
 
     /// Panic handler implementation for the application
     pub fn panic_handler(&mut self, _info: &PanicInfo) -> ! {
-        let mut tmp_buf = [0u8; 20];
+        //let mut tmp_buf = [0u8; 20];
 
-        self.usb_serial.write(b"{\"log\":\"").ok();
-        self.usb_serial.write(b"PANIC! => ").ok();
-        self.usb_serial
-            .write(_info.location().unwrap().file().as_bytes())
-            .ok();
-        self.usb_serial.write(b":").ok();
-        self.usb_serial
-            .write(_info.location().unwrap().line().numtoa(10, &mut tmp_buf))
-            .ok();
-        self.usb_serial.write(b"\"}\r\n").ok();
+        //self.usb_serial.write(b"{\"log\":\"").ok();
+        //self.usb_serial.write(b"PANIC! => ").ok();
+        //self.usb_serial
+        //    .write(_info.location().unwrap().file().as_bytes())
+        //    .ok();
+        //self.usb_serial.write(b":").ok();
+        //self.usb_serial
+        //    .write(_info.location().unwrap().line().numtoa(10, &mut tmp_buf))
+        //    .ok();
+        //self.usb_serial.write(b"\"}\r\n").ok();
         loop {
             // self.led_pin.set_high().ok();
             // self.delay.delay_ms(100);
