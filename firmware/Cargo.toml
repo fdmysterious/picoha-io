@@ -3,6 +3,9 @@ name = "aardvark-rp2040-clone"
 version = "0.1.0"
 edition = "2021"
 
+[env]
+USB_SERIAL_NUMBER = "TEST_123456789"
+
 [dependencies]
 
 # Cortex support
@@ -11,7 +14,6 @@ cortex-m-rt = "0.7.0"
 
 # Rp pico support
 rp2040-boot2 = { version = "0.2.0", optional = true }
-rp2040-hal = "0.4.0"
 rp-pico = "0.3.0"
 
 # Embedded libs
@@ -41,7 +43,7 @@ arrayvec = { version = "0.7.2", default-features = false }
 
 # To provide base64 algo
 base64 = { version = "0.13.0", default-features = false }
+ufmt = "0.2.0"
 
 [features]
 boot2 = ["rp2040-boot2"]
-
