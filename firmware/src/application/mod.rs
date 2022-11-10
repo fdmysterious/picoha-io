@@ -1,9 +1,5 @@
 // ============================================================================
 
-/// Number of io on the rp2040
-pub const NB_IO_RP2040: usize = 27;
-pub const MAX_IO_INDEX_RP2040: usize = 28;
-
 // HAL
 use embedded_hal::digital::v2::OutputPin;
 
@@ -24,10 +20,17 @@ mod protocol;
 use protocol::{Answer, AnswerText, Command, CommandCode};
 use protocol::{CmdPinDirValue, CmdPinWriteValue};
 
+// GPIO Control
+mod gpio_ctrl;
+use gpio_ctrl::GpioController;
+
 // ============================================================================
 
 enum CmdError {
+    /// Arg value is invalid
     ArgError(u8),
+
+    /// A HAL error occured
     HalError(hal::gpio::Error),
 }
 
@@ -43,14 +46,11 @@ pub struct PicohaIo {
     /// To manage delay
     delay: cortex_m::delay::Delay,
 
-    /// Objects to control io of the board
-    dyn_ios: [DynPin; NB_IO_RP2040],
-    /// Map to convert gpio index into *dyn_ios* index
-    /// This is because some gpioX does not exist (or not driveable) and create hole in the array
-    map_ios: [usize; MAX_IO_INDEX_RP2040],
-
     /// Buffer to hold incomnig data
     usb_buffer: UsbBuffer<512>,
+
+    /// Controls gpios
+    gpio_ctrl: GpioController,
 }
 
 // ============================================================================
@@ -63,14 +63,12 @@ impl PicohaIo {
     /// Application intialization
     pub fn new(
         delay: cortex_m::delay::Delay,
-        dyn_ios: [DynPin; NB_IO_RP2040],
-        map_ios: [usize; MAX_IO_INDEX_RP2040]
+        pins: rp_pico::Pins,
     ) -> Self {
         Self {
             delay:      delay,
-            dyn_ios:    dyn_ios,
-            map_ios:    map_ios,
             usb_buffer: UsbBuffer::new(),
+            gpio_ctrl: GpioController::new(pins),
         }
     }
 
@@ -98,38 +96,38 @@ impl PicohaIo {
     /// To configure the  mode of the io
     ///
     fn process_set_io_mode(&mut self, cmd: &Command) -> Answer {
-        // Get io from cmd
-        let idx = self.map_ios[cmd.pin as usize];
-        let io = &mut self.dyn_ios[idx];
-
-        // Parse argument
-        // Process the argument
-        match Self::cmd_pin_set_io(io, cmd.arg) {
-            Ok(_) => Answer::ok(
-                cmd.pin,
-                0,
-                AnswerText::from_str("m").unwrap()
-            ),
-
-            Err(err) => match err {
-                CmdError::HalError(_) => Answer::error(
+        // Get pin value
+        match self.gpio_ctrl.borrow(cmd.pin) {
+            Some(io) => match Self::cmd_pin_set_io(io, cmd.arg) {
+                Ok(_) => Answer::ok(
+                    cmd.pin,
                     0,
-                    0,
-                    AnswerText::from_str("Cannot set desired I/O mode").unwrap(),
+                    AnswerText::from_str("m").unwrap()
                 ),
 
-                CmdError::ArgError(x) => {
-                    let mut txt = AnswerText::new();
-                    write!(txt, "Invalid arg: {}", x).unwrap();
+                Err(err) => match err {
+                    CmdError::HalError(_) => Answer::error(
+                        0,
+                        0,
+                        AnswerText::from_str("Cannot set desired I/O mode").unwrap(),
+                    ),
 
-                    Answer::error(
-                        0,
-                        0,
-                        txt
-                    )
+                    CmdError::ArgError(x) => {
+                        let mut txt = AnswerText::new();
+                        write!(txt, "Invalid arg: {}", x).unwrap();
+
+                        Answer::error(
+                            0,
+                            0,
+                            txt
+                        )
+                    },
                 }
-            }
+            },
+
+            None => Answer::error(cmd.pin, 0, AnswerText::from_str("Invalid pin").unwrap()),
         }
+
     }
 
     // ------------------------------------------------------------------------
@@ -156,33 +154,31 @@ impl PicohaIo {
     }
 
     /// To write a value on the io
-    ///
     fn process_write_io(&mut self, cmd: &Command) -> Answer {
-        // Get io from cmd
-        let idx = self.map_ios[cmd.pin as usize];
-        let io = &mut self.dyn_ios[idx];
-
-        // Process the argument
-        match Self::cmd_pin_set_value(io, cmd.arg) {
-            Ok(())             => Answer::ok(cmd.pin, 0, AnswerText::from_str("m").unwrap()),
-            Err(err) => match err {
-                CmdError::HalError(_) => Answer::error(
-                    cmd.pin,
-                    0,
-                    AnswerText::from_str("Cannot set desired pin value. Is direction correct?").unwrap(),
-                ),
-
-                CmdError::ArgError(x) => {
-                    let mut txt = AnswerText::new();
-                    write!(txt, "Invalid arg: {}", x).unwrap();
-
-                    return Answer::error(
+        match self.gpio_ctrl.borrow(cmd.pin) {
+            Some(io) => match Self::cmd_pin_set_value(io, cmd.arg) {
+                Ok(())             => Answer::ok(cmd.pin, 0, AnswerText::from_str("m").unwrap()),
+                Err(err) => match err {
+                    CmdError::HalError(_) => Answer::error(
                         cmd.pin,
                         0,
-                        txt
-                    );
+                        AnswerText::from_str("Cannot set desired pin value. Is direction correct?").unwrap(),
+                    ),
+
+                    CmdError::ArgError(x) => {
+                        let mut txt = AnswerText::new();
+                        write!(txt, "Invalid arg: {}", x).unwrap();
+
+                        Answer::error(
+                            cmd.pin,
+                            0,
+                            txt
+                        )
+                    }
                 }
-            }
+            },
+
+            None => Answer::error(cmd.pin, 0, AnswerText::from_str("Invalid pin").unwrap()),
         }
     }
 
@@ -197,22 +193,22 @@ impl PicohaIo {
 
     /// To read an io
     fn process_read_io(&mut self, cmd: &Command) -> Answer {
-        // Get io from cmd
-        let idx = self.map_ios[cmd.pin as usize];
-        let io  = &mut self.dyn_ios[idx];
+        match self.gpio_ctrl.borrow(cmd.pin) {
+            Some(io) => match Self::cmd_pin_get_value(io) {
+                Ok(v) => Answer::ok(
+                    cmd.pin,
+                    match v { true => 1, false => 0},
+                    AnswerText::from_str("r").unwrap(),
+                ),
 
-        match Self::cmd_pin_get_value(io) {
-            Ok(v) => Answer::ok(
-                cmd.pin,
-                match v { true => 1, false => 0},
-                AnswerText::from_str("r").unwrap(),
-            ),
+                Err(_) => Answer::error(
+                    cmd.pin,
+                    0,
+                    AnswerText::from_str("Cannot read pin value. Is direction correct?").unwrap()
+                )
+            },
 
-            Err(_) => Answer::error(
-                cmd.pin,
-                0,
-                AnswerText::from_str("Cannot read pin value. Is direction correct?").unwrap()
-            )
+            None => Answer::error(cmd.pin, 0, AnswerText::from_str("Invalid pin").unwrap()),
         }
     }
 

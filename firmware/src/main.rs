@@ -105,42 +105,7 @@ fn main() -> ! {
     // Init. the app
     let mut app = application::PicohaIo::new(
         cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
-        [
-            pins.gpio0.into(),
-            pins.gpio1.into(),
-            pins.gpio2.into(),
-            pins.gpio3.into(),
-            pins.gpio4.into(),
-            pins.gpio5.into(),
-            pins.gpio6.into(),
-            pins.gpio7.into(),
-            pins.gpio8.into(),
-            pins.gpio9.into(),
-            pins.gpio10.into(),
-            pins.gpio11.into(),
-            pins.gpio12.into(),
-            pins.gpio13.into(),
-            pins.gpio14.into(),
-            pins.gpio15.into(),
-            pins.gpio16.into(),
-            pins.gpio17.into(),
-            pins.gpio18.into(),
-            pins.gpio19.into(),
-            pins.gpio20.into(),
-            pins.gpio21.into(),
-            pins.gpio22.into(),
-            // 23
-            // 24
-            pins.led.into(),
-            pins.gpio26.into(),
-            pins.gpio27.into(),
-            pins.gpio28.into(),
-        ],
-        [
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-            255, 255,  // 23 and 24 are not available
-            23, 24, 25 // adapt last indexes
-        ],
+        pins,
     );
 
     // Run the app
