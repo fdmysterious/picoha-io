@@ -18,6 +18,9 @@ RUN addgroup dialout --gid ${SERIALGID}
 RUN adduser builder
 RUN usermod -aG dialout builder
 
+# Configure sudo
+RUN echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 # Install toolchain
 RUN rustup target install thumbv6m-none-eabi
 
@@ -26,3 +29,4 @@ USER builder
 ENV CARGO_HOME=/home/builder/.cargo
 RUN cargo install elf2uf2-rs
 RUN cargo install cargo-generate
+

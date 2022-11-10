@@ -3,12 +3,23 @@
     "context": "..",
     "dockerFile": "../Dockerfile",
 
+    "build": {
+        "args": {
+            "SERIALGID": "20" // Set this to your dialout or uucp group GID
+        }
+    },
+
     "remoteUser": "builder",
     "runArgs": ["--privileged"],
+
+    "mounts": [
+        "source=/dev,target=/dev,type=bind"
+    ],
 
     "extensions": [
         "hbenl.vscode-test-explorer",
         "Gruntfuggly.todo-tree",
-        "cnshenj.vscode-task-manager"
+        "cnshenj.vscode-task-manager",
+        "rust-lang.rust-analyzer"
     ]
 }
