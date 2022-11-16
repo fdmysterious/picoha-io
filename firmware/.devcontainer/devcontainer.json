@@ -13,7 +13,8 @@
     "runArgs": ["--privileged"],
 
     "mounts": [
-        "source=/dev,target=/dev,type=bind"
+        "source=/dev,target=/dev,type=bind",
+	"source=${localEnv:HOME}/.ssh,target=/home/builder/.ssh,type=bind"
     ],
 
     "extensions": [
