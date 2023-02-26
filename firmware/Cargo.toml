@@ -41,5 +41,7 @@ serde_repr = "0.1.9"
 # To provide base64 algo
 base64 = { version = "0.13.0", default-features = false }
 
+protocols = {path="libs/protocols"}
+
 [features]
 boot2 = ["rp2040-boot2"]

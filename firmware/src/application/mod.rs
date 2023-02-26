@@ -36,8 +36,7 @@ enum CmdError {
 
 // ============================================================================
 
-mod buffer;
-use buffer::UsbBuffer;
+pub mod buffer;
 
 // ============================================================================
 
@@ -45,9 +44,6 @@ use buffer::UsbBuffer;
 pub struct PicohaIo {
     /// To manage delay
     delay: cortex_m::delay::Delay,
-
-    /// Buffer to hold incomnig data
-    usb_buffer: UsbBuffer<512>,
 
     /// Controls gpios
     gpio_ctrl: GpioController,
@@ -67,7 +63,6 @@ impl PicohaIo {
     ) -> Self {
         Self {
             delay:      delay,
-            usb_buffer: UsbBuffer::new(),
             gpio_ctrl: GpioController::new(pins),
         }
     }
@@ -214,55 +209,16 @@ impl PicohaIo {
 
     // ------------------------------------------------------------------------
 
-    /// Process incoming commands
-    ///
-    pub fn update_command_processing(&mut self) -> Option<Answer> {
-        let mut cmd_buffer = [0u8; 512];
-
-        match self.usb_buffer.get_command(&mut cmd_buffer) {
-            None => None,
-            Some(cmd_end_index) => {
-                let cmd_slice_ref = &cmd_buffer[0..cmd_end_index];
-
-                match serde_json_core::de::from_slice::<Command>(cmd_slice_ref) {
-                    // Process parsing error
-                    Err(_e) => {
-                        let mut txt = AnswerText::new();
-                        write!(txt, "Error: {}", _e).unwrap();
-
-                        Some(Answer::error(0, 0, txt))
-                    },
-
-                    // Process received command
-                    Ok(cmd) => {
-                        let data = &cmd.0;
-
-                        match CommandCode::from_u8(data.cod) {
-                            Some(x) => match x {
-                                CommandCode::SetDirection => Some(self.process_set_io_mode(data)),
-                                CommandCode::WriteValue   => Some(self.process_write_io(data)),
-                                CommandCode::ReadValue    => Some(self.process_read_io(data)),
-                                CommandCode::Test         => Some(Answer::ok(0, 1, AnswerText::from_str("").unwrap())),
-                            },
-
-                            None => {
-                                let mut txt = AnswerText::new();
-                                write!(txt, "Uknown command code: {}", data.cod).unwrap();
-
-                                Some(Answer::error(0, 0, txt))
-                            },
-                        }
-                    },
-                }
-            }
-        }
-    }
+    ///// Process incoming commands
+    /////
+    //pub fn update_command_processing(&mut self) -> Option<Answer> {
+    //}
 
     // ------------------------------------------------------------------------
 
-    /// Feed input buffer
-    ///
-    pub fn feed_cmd_buffer(&mut self, buf: &[u8], count: usize) {
-        self.usb_buffer.load(buf, count);
-    }
+    ///// Feed input buffer
+    /////
+    //pub fn feed_cmd_buffer(&mut self, buf: &[u8], count: usize) {
+    //    self.usb_buffer.load(buf, count);
+    //}
 }

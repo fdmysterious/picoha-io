@@ -16,7 +16,10 @@ RUN apt-get install -y libudev-dev
 RUN delgroup dialout
 RUN addgroup dialout --gid ${SERIALGID}
 RUN adduser builder
-RUN usermod -aG dialout builder
+RUN usermod -aG dialout,sudo builder
+
+# Sudo stuff
+RUN echo "%sudo   ALL=(ALL:ALL) ALL" >> /etc/sudoers
 
 # Install toolchain
 RUN rustup target install thumbv6m-none-eabi
@@ -25,4 +28,3 @@ RUN rustup target install thumbv6m-none-eabi
 USER builder
 ENV CARGO_HOME=/home/builder/.cargo
 RUN cargo install elf2uf2-rs
-RUN cargo install cargo-generate

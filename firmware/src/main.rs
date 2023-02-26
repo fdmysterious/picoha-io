@@ -26,6 +26,12 @@ use rp_pico::hal;
 // USB Device support
 use usb_device::class_prelude::*;
 
+use embedded_hal::digital::v2::{
+    OutputPin,
+    ToggleableOutputPin,
+    PinState,
+};
+
 // To use pin control stuff
 //use embedded_hal::digital::v2::OutputPin;
 
@@ -33,6 +39,9 @@ use usb_device::class_prelude::*;
 
 mod application;
 mod platform;
+
+use application::buffer::UsbBufferIndex;
+use protocols::{self, slip::Decoder};
 
 // ============================================================================
 
@@ -90,6 +99,7 @@ fn main() -> ! {
 
     let mut usb_serial = platform::init_usb_serial(&usb_bus);
     let mut usb_device = platform::init_usb_device(&usb_bus);
+    let mut decoder    = Decoder::<16>::new();
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
@@ -102,39 +112,69 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
+    let mut led = pins.led.into_push_pull_output();
+
     // Init. the app
-    let mut app = application::PicohaIo::new(
-        cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
-        pins,
-    );
+    //let mut app = application::PicohaIo::new(
+    //    cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
+    //    pins,
+    //);
 
     // Run the app
-    let mut ans_buffer = [0u8; 1024];
     loop {
-        // Update USB
         if usb_device.poll(&mut [&mut usb_serial]) {
-            let mut buf = [0u8; 1024];
+            let mut buf = [0u8; 128];
+
             match usb_serial.read(&mut buf) {
                 Err(_) => {}
                 Ok(0)  => {}
-
+                
                 Ok(count) => {
-                    app.feed_cmd_buffer(&buf, count);
-                }
-            }
-        }
+                    let mut idx = 0;
+                    while idx < count {
+                        match decoder.feed(&buf[idx..(count)]) {
+                            Err(e) => {
+                                idx += e.pos;
+                                decoder.reset(); // Reset decoder
+                            },
 
-        // Update app command process
-        match app.update_command_processing() {
-            None           => {},
-            Some(response) => {
-                match serde_json_core::to_slice(&response, &mut ans_buffer) {
-                    Ok(size) => {
-                        ans_buffer[size] = '\n' as u8;
-                        usb_serial.write(&ans_buffer[0..(size+1)]).unwrap();
+                            Ok((nbytes, is_end)) => {
+                                idx += nbytes;
+
+                                if is_end {
+                                    
+                                    // Get slice
+                                    let slice = decoder.slice();
+
+                                    // Process incoming frame
+                                    // TODO // Error managment
+                                    let frame = match protocols::ha::MsgFrame::<16>::from_slice(slice) {
+                                        Ok(x) => {
+                                            let req = protocols::gpio::Request::consume_frame(x).unwrap();
+
+                                            match req {
+                                                protocols::gpio::Request::GpioWrite(idx, value) => {
+                                                    match value {
+                                                        protocols::gpio::GpioValue::Low  => led.set_low().unwrap(),
+                                                        protocols::gpio::GpioValue::High => led.set_high().unwrap(),
+                                                    }
+                                                }
+
+                                                _ => {
+                                                    // TODO
+                                                }
+                                            }
+                                        }
+
+                                        Err(exc) => {
+                                        }
+                                    };
+
+                                    decoder.reset();
+                                }
+                            }
+                        }
                     }
-
-                    Err(_) => {} // Ignore errors for now
                 }
             }
         }
@@ -143,42 +183,11 @@ fn main() -> ! {
 
 // ============================================================================
 
-/// This function is called whenever the USB Hardware generates an Interrupt
-/// Request.
-///
-/// We do all our USB work under interrupt, so the main thread can continue on
-/// knowing nothing about USB.
-//#[allow(non_snake_case)]
-//#[interrupt]
-//unsafe fn USBCTRL_IRQ() {
-//    //let app = APP_INSTANCE.as_mut().unwrap();
-//    //app.usbctrl_irq();
-//    USBIT_FLAG.store(true, Ordering::SeqCst);
-//}
-
-// ============================================================================
-
 // PANIC MANAGEMENT
 use core::panic::PanicInfo;
 #[panic_handler]
 unsafe fn panic(_info: &PanicInfo) -> ! {
-    //let mut tmp_buf = [0u8; 20];
-
-    //self.usb_serial.write(b"{\"log\":\"").ok();
-    //self.usb_serial.write(b"PANIC! => ").ok();
-    //self.usb_serial
-    //    .write(_info.location().unwrap().file().as_bytes())
-    //    .ok();
-    //self.usb_serial.write(b":").ok();
-    //self.usb_serial
-    //    .write(_info.location().unwrap().line().numtoa(10, &mut tmp_buf))
-    //    .ok();
-    //self.usb_serial.write(b"\"}\r\n").ok();
     loop {
-        // self.led_pin.set_high().ok();
-        // self.delay.delay_ms(100);
-        // self.led_pin.set_low().ok();
-        // self.delay.delay_ms(100);
     }
 }
 
