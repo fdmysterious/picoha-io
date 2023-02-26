@@ -3,6 +3,7 @@
 pub mod slip;
 pub mod ha;
 pub mod gpio;
+pub mod common;
 
 #[cfg(tests)]
 mod tests {
@@ -14,7 +15,7 @@ mod tests {
             0xB4, 0x54,
         ];
 
-        let msg: ha::MsgFrame<2> = ha::MsgFrame::from_slice(&MSG_DATA).unwrap();
+        let msg: ha::MsgFrame = ha::MsgFrame::from_slice(&MSG_DATA).unwrap();
 
         println!("{:?}", msg);
         println!("{:?}", msg.crc());

@@ -4,30 +4,34 @@ const ESC_END: u8 = 0xDC;
 const ESC_ESC: u8 = 0xDD;
 
 #[derive(Debug)]
-pub enum DecoderErrorCode {
+pub enum SlipErrorCode {
     BadEsc,
     BufferFull,
 }
 
 #[derive(Debug)]
-pub struct DecoderError {
+pub struct SlipError {
     pub pos: usize,
-    pub code: DecoderErrorCode,
+    pub code: SlipErrorCode,
 }
 
-pub struct DecoderBuffer<const CAPACITY: usize> {
+pub struct BasicBuffer<const CAPACITY: usize> {
     idx: usize,
     buf: [u8; CAPACITY],
 }
 
 pub struct Decoder<const CAPACITY: usize> {
-    buf: DecoderBuffer<CAPACITY>,
+    buf: BasicBuffer<CAPACITY>,
     is_escaping: bool
+}
+
+pub struct Encoder<const CAPACITY: usize> {
+    buf: BasicBuffer<CAPACITY>,
 }
 
 ////////////////////////////////////////////
 
-impl<const CAPACITY: usize> DecoderBuffer<CAPACITY> {
+impl<const CAPACITY: usize> BasicBuffer<CAPACITY> {
     pub fn new() -> Self {
         Self {idx: 0, buf: [0u8; CAPACITY] }
     }
@@ -40,9 +44,9 @@ impl<const CAPACITY: usize> DecoderBuffer<CAPACITY> {
         &self.buf[..self.idx]
     }
 
-    pub fn put(&mut self, c: u8)-> Result<(), DecoderErrorCode> {
+    pub fn put(&mut self, c: u8)-> Result<(), SlipErrorCode> {
         if self.idx >= CAPACITY {
-            Err(DecoderErrorCode::BufferFull)
+            Err(SlipErrorCode::BufferFull)
         }
 
         else {
@@ -53,10 +57,12 @@ impl<const CAPACITY: usize> DecoderBuffer<CAPACITY> {
     }
 }
 
+////////////////////////////////////////////
+
 impl<const CAPACITY: usize> Decoder<CAPACITY> {
     pub fn new() -> Self {
         Self {
-            buf: DecoderBuffer::new(),
+            buf: BasicBuffer::new(),
             is_escaping: false
         }
     }
@@ -70,7 +76,7 @@ impl<const CAPACITY: usize> Decoder<CAPACITY> {
         self.buf.slice()
     }
 
-    pub fn feed(&mut self, input: &[u8]) -> Result<(usize, bool), DecoderError> {
+    pub fn feed(&mut self, input: &[u8]) -> Result<(usize, bool), SlipError> {
         let mut i = 0;
 
         while i < input.len() {
@@ -83,18 +89,18 @@ impl<const CAPACITY: usize> Decoder<CAPACITY> {
                     ESC_END => {
                         match self.buf.put(END) {
                             Ok(_) => {},
-                            Err(code) => {return Err(DecoderError{ pos: i, code: code});}
+                            Err(code) => {return Err(SlipError{ pos: i, code: code});}
                         }
                     }
 
                     ESC_ESC => {
                         match self.buf.put(ESC) {
                             Ok(_) => {},
-                            Err(code) => {return Err(DecoderError{ pos: i, code: code});}
+                            Err(code) => {return Err(SlipError{ pos: i, code: code});}
                         }
                     }
 
-                    _ => {return Err(DecoderError{ pos: i, code: DecoderErrorCode::BadEsc});}
+                    _ => {return Err(SlipError{ pos: i, code: SlipErrorCode::BadEsc});}
                 }
             }
 
@@ -112,7 +118,7 @@ impl<const CAPACITY: usize> Decoder<CAPACITY> {
                     _ => {
                         match self.buf.put(c) {
                             Ok(_) => {},
-                            Err(code) => {return Err(DecoderError{ pos: i, code: code});}
+                            Err(code) => {return Err(SlipError{ pos: i, code: code});}
                         }
                     }
                 }
@@ -121,5 +127,68 @@ impl<const CAPACITY: usize> Decoder<CAPACITY> {
 
         // Input buffer processed, but no packet end yet detected
         Ok((i, false))
+    }
+}
+
+impl<const CAPACITY: usize> Encoder<CAPACITY> {
+    pub fn new() -> Self {
+        Self {
+            buf: BasicBuffer::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.buf.reset();
+    }
+
+    pub fn slice(&self) -> &[u8] {
+        self.buf.slice()
+    }
+
+    pub fn feed(&mut self, input: &[u8]) -> Result<usize, SlipError>{
+        let mut i = 0;
+        while i < input.len() {
+            let c = input[i];
+            i += 1;
+
+            match c {
+                END => {
+                    match self.buf.put(ESC) {
+                        Ok(_) => {},
+                        Err(code) => {return Err(SlipError{pos: i, code: code})}
+                    }
+
+                    match self.buf.put(ESC_END) {
+                        Ok(_) => {},
+                        Err(code) => {return Err(SlipError{pos: i, code: code})}
+                    }
+                },
+
+                ESC => {
+                    match self.buf.put(ESC) {
+                        Ok(_) => {},
+                        Err(code) => {return Err(SlipError{pos: i, code: code})}
+                    }
+
+                    match self.buf.put(ESC_ESC) {
+                        Ok(_) => {},
+                        Err(code) => {return Err(SlipError{pos: i, code: code})}
+                    }
+                },
+
+                other => {
+                    match self.buf.put(other) {
+                        Ok(_)     => {}
+                        Err(code) => {return Err(SlipError{pos: i, code: code})}
+                    }
+                }
+            }
+        }
+
+        Ok(i)
+    }
+
+    pub fn finish(&mut self) -> Result<(), SlipErrorCode>{
+        Ok(self.buf.put(END)?)
     }
 }

@@ -6,6 +6,7 @@ use heapless::{
     Vec
 };
 
+
 #[derive(Debug)]
 pub enum Code {
     // Generic requests
@@ -22,6 +23,7 @@ pub enum Code {
 
     // Gpio interface specific resp codes
     GpioValue,
+    GpioDir,
 
     // Response codes
     Good,
@@ -30,6 +32,10 @@ pub enum Code {
     ErrUnknownCode,
     ErrInvalidArgs,
     ErrBusy,
+
+    VersionResp,
+    ItfTypeResp,
+    IdResp,
 }
 
 impl Code {
@@ -53,7 +59,8 @@ impl Code {
             0x0103 => Some(Self::GpioWrite      ),
 
             // Response codes for GPIO starting from 0xFEFF
-            0xFEFF => Some(Self::GpioValue      ),
+            0xFDFF => Some(Self::GpioValue      ),
+            0xFDFE => Some(Self::GpioDir        ),
 
             // Response codes stating from FFFF
             0xFFFF => Some(Self::Good           ),
@@ -62,6 +69,10 @@ impl Code {
             0xFFFC => Some(Self::ErrUnknownCode ),
             0xFFFB => Some(Self::ErrInvalidArgs ),
             0xFFFA => Some(Self::ErrBusy        ),
+
+            0xFEFF => Some(Self::VersionResp    ),
+            0xFEFE => Some(Self::ItfTypeResp    ),
+            0xFEFD => Some(Self::IdResp         ),
 
             _ => None,
         }
@@ -73,22 +84,107 @@ impl Code {
             Self::ItfType        => 0x0001,
             Self::Version        => 0x0002,
             Self::IdGet          => 0x0003,
-            //Self::IdSet          => 0x0004,
 
             Self::GpioDirSet     => 0x0100,
             Self::GpioDirGet     => 0x0101,
             Self::GpioRead       => 0x0102,
             Self::GpioWrite      => 0x0103,
 
-            // Response codes for GPIO startin from 0xFEFF
-            Self::GpioValue      => 0xFEFF,
+            // Response codes for GPIO
+            Self::GpioValue      => 0xFDFF,
+            Self::GpioDir        => 0xFDFE,
 
+            // Response codes for generic calls
+            Self::VersionResp    => 0xFEFF,
+            Self::ItfTypeResp    => 0xFEFE,
+            Self::IdResp         => 0xFEFD,
+
+            // Generic status codes
             Self::Good           => 0xFFFF,
             Self::ErrGeneric     => 0xFFFE,
             Self::ErrCRC         => 0xFFFD,
             Self::ErrUnknownCode => 0xFFFC,
             Self::ErrInvalidArgs => 0xFFFB,
             Self::ErrBusy        => 0xFFFA,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum CodeCategory {
+    ReqGeneric,
+    ReqGpio,
+
+    RespGpio,
+    RespGeneric,
+    StatusGeneric,
+}
+
+impl CodeCategory {
+    pub fn categorize(code: &Code) -> Self {
+        match code {
+            Code::Ping           => Self::ReqGeneric,
+            Code::ItfType        => Self::ReqGeneric,
+            Code::Version        => Self::ReqGeneric,
+            Code::IdGet          => Self::ReqGeneric,
+
+            Code::GpioDirGet     => Self::ReqGpio,
+            Code::GpioDirSet     => Self::ReqGpio,
+            Code::GpioWrite      => Self::ReqGpio,
+            Code::GpioRead       => Self::ReqGpio,
+
+            Code::GpioValue      => Self::RespGpio,
+            Code::GpioDir        => Self::RespGpio,
+
+            Code::VersionResp    => Self::RespGeneric,
+            Code::ItfTypeResp    => Self::RespGeneric,
+            Code::IdResp         => Self::RespGeneric,
+
+            Code::Good           => Self::StatusGeneric,
+            Code::ErrGeneric     => Self::StatusGeneric,
+            Code::ErrCRC         => Self::StatusGeneric,
+            Code::ErrUnknownCode => Self::StatusGeneric,
+            Code::ErrInvalidArgs => Self::StatusGeneric,
+            Code::ErrBusy        => Self::StatusGeneric,
+        }
+    }
+
+    pub fn is_request(&self) -> bool {
+        match self {
+            Self::ReqGeneric | Self::ReqGpio => true,
+            _                                => false,
+        }
+    }
+
+    pub fn is_response(&self) -> bool {
+        match self {
+            Self::RespGpio | Self::RespGeneric | Self::StatusGeneric => true,
+            _                                                        => false,
+        }
+    }
+}
+
+////////////////////////////
+
+#[derive(Debug)]
+pub enum ItfType {
+    Dummy,
+    Gpio,
+}
+
+impl ItfType {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        match x {
+            0x00 => Some(Self::Dummy),
+            0x01 => Some(Self::Gpio),
+            _    => None
+        }
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            Self::Dummy => 0x00,
+            Self::Gpio  => 0x01,
         }
     }
 }
@@ -107,12 +203,50 @@ pub enum MsgError {
 }
 
 #[derive(Debug)]
-pub struct MsgFrame<const CAPACITY: usize> {
+pub struct MsgFrame {
     pub code: Code,
-    pub data: Vec<u8, CAPACITY>,
+    pub data: Vec<u8, 64>,
 }
 
-impl<const CAPACITY: usize> MsgFrame<CAPACITY> {
+impl MsgError {
+    pub fn to_frame(&self) -> MsgFrame {
+        match self {
+            Self::InvalidLength => MsgFrame::new(
+                Code::ErrGeneric,
+                "Invalid length".as_bytes()
+            ),
+
+            Self::InvalidCRC(_a, _b) => MsgFrame::new(
+                Code::ErrGeneric,
+                "CRC error".as_bytes()
+            ),
+
+            Self::UnknownCode => MsgFrame::new(
+                Code::ErrUnknownCode,
+                "Unknown code".as_bytes()
+            ),
+
+            Self::InvalidArg => MsgFrame::new(
+                Code::ErrInvalidArgs,
+                "Invalid argument".as_bytes(),
+            ),
+
+            Self::NotARequest(_c) => MsgFrame::new(
+                Code::ErrUnknownCode,
+                "Not a request code".as_bytes()
+            ),
+        }
+    }
+}
+
+impl MsgFrame {
+    pub fn new(code: Code, data: &[u8]) -> Self {
+        Self {
+            code,
+            data: Vec::from_slice(data).unwrap()
+        }
+    }
+
     pub fn from_slice(ss: &[u8]) -> Result<Self, MsgError> {
         // Initial length check
         // 4: 2 for code + 2 for crc

@@ -32,16 +32,18 @@ use embedded_hal::digital::v2::{
     PinState,
 };
 
+use heapless::Vec;
+
 // To use pin control stuff
 //use embedded_hal::digital::v2::OutputPin;
 
 // ============================================================================
 
-mod application;
+//mod application;
 mod platform;
+mod application;
 
-use application::buffer::UsbBufferIndex;
-use protocols::{self, slip::Decoder};
+use protocols::{self, slip::{Decoder, Encoder}};
 
 // ============================================================================
 
@@ -57,13 +59,6 @@ use protocols::{self, slip::Decoder};
 
 // ============================================================================
 
-/// Entry point to our bare-metal application.
-///
-/// The `#[entry]` macro ensures the Cortex-M start-up code calls this function
-/// as soon as all global variables are initialised.
-///
-/// The function configures the RP2040 peripherals, then blinks the LED in an
-/// infinite loop.
 #[entry]
 fn main() -> ! {
     // Grab our singleton objects
@@ -99,7 +94,9 @@ fn main() -> ! {
 
     let mut usb_serial = platform::init_usb_serial(&usb_bus);
     let mut usb_device = platform::init_usb_device(&usb_bus);
-    let mut decoder    = Decoder::<16>::new();
+
+    let mut decoder    = Decoder::<64>::new();
+    let mut encoder    = Encoder::<64>::new();
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
@@ -112,18 +109,16 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let mut led = pins.led.into_push_pull_output();
-
     // Init. the app
-    //let mut app = application::PicohaIo::new(
-    //    cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
-    //    pins,
-    //);
+    let mut app = application::PicohaIo::new(
+        cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer()), // Append delay feature to the app
+        pins,
+    );
 
     // Run the app
     loop {
         if usb_device.poll(&mut [&mut usb_serial]) {
-            let mut buf = [0u8; 128];
+            let mut buf = [0u8; 64];
 
             match usb_serial.read(&mut buf) {
                 Err(_) => {}
@@ -142,35 +137,51 @@ fn main() -> ! {
                                 idx += nbytes;
 
                                 if is_end {
-                                    
-                                    // Get slice
-                                    let slice = decoder.slice();
+                                    fn _process_slice(app: &application::PicohaIo, slice: &[u8]) -> Result<protocols::ha::MsgFrame, protocols::ha::MsgError> {
+                                        let req_frame = protocols::ha::MsgFrame::from_slice(slice)?;
+                                        
+                                        match protocols::ha::CodeCategory::categorize(&req_frame.code) {
+                                            protocols::ha::CodeCategory::ReqGeneric => {
+                                                let req  = protocols::common::Request::consume_frame(req_frame)?;
+                                                let resp = app.process_generic(req);
 
-                                    // Process incoming frame
-                                    // TODO // Error managment
-                                    let frame = match protocols::ha::MsgFrame::<16>::from_slice(slice) {
-                                        Ok(x) => {
-                                            let req = protocols::gpio::Request::consume_frame(x).unwrap();
-
-                                            match req {
-                                                protocols::gpio::Request::GpioWrite(idx, value) => {
-                                                    match value {
-                                                        protocols::gpio::GpioValue::Low  => led.set_low().unwrap(),
-                                                        protocols::gpio::GpioValue::High => led.set_high().unwrap(),
-                                                    }
-                                                }
-
-                                                _ => {
-                                                    // TODO
-                                                }
+                                                Ok(resp.to_frame())
                                             }
-                                        }
 
-                                        Err(exc) => {
+                                            _ => Ok(protocols::common::Response::Good.to_frame())
+
+                                        }
+                                    }
+
+                                    // Get and process incoming slice
+                                    let slice          = decoder.slice();
+                                    let response_frame = match _process_slice(&app, &slice){
+                                        Ok(frame) => frame,
+                                        Err(exc)  => {
+                                            exc.to_frame()
                                         }
                                     };
 
+                                    // Try encode frame
+                                    match encoder.feed(&response_frame.code.to_u16().to_be_bytes()) {
+                                        Ok(_) => match encoder.feed(&response_frame.data.as_slice()) {
+                                            Ok(_) => match encoder.feed(&response_frame.crc().to_be_bytes()) {
+                                                Ok(_) => match encoder.finish() {
+                                                    Ok(_) => { usb_serial.write(encoder.slice()); },
+                                                    Err(_) => {}
+                                                }
+
+                                                Err(_) => {}
+                                            },
+
+                                            Err(_) => {}
+                                        }
+
+                                        Err(_) => {}
+                                    }
+
                                     decoder.reset();
+                                    encoder.reset();
                                 }
                             }
                         }

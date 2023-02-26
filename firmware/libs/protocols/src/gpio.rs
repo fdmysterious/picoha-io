@@ -58,11 +58,6 @@ impl GpioValue {
 
 #[derive(Debug)]
 pub enum Request {
-    Ping,
-    ItfType,
-    Version,
-    IdGet,
-
     GpioDirSet(u8, GpioDir),
     GpioDirGet(u8),
     GpioWrite(u8, GpioValue),
@@ -70,15 +65,8 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn consume_frame<const BUFLEN: usize>(ff: ha::MsgFrame<BUFLEN>) -> Result<Self, ha::MsgError> {
+    pub fn consume_frame(ff: ha::MsgFrame) -> Result<Self, ha::MsgError> {
         match ff.code {
-            ha::Code::Ping       => Ok(Self::Ping),
-            ha::Code::ItfType    => Ok(Self::ItfType),
-            ha::Code::Version    => Ok(Self::Version),
-            ha::Code::IdGet      => Ok(Self::IdGet),
-
-            ////////////////////////////////////////
-
             ha::Code::GpioDirSet => {
                 let mut argp = ha::ArgParser::new(&ff.data.as_slice());
 
@@ -148,13 +136,19 @@ impl Request {
 //////////////////////////////////////
 
 #[derive(Debug)]
-pub enum Response {
+pub enum Response<'a> {
     Good,
+
     GpioValue(u8, GpioValue),
+    GpioDir(u8, GpioDir),
+
+    ErrInvalidArgs,
+    ErrGeneric(&'a str),
 }
 
-impl Response {
-    pub fn to_frame(&self) -> ha::MsgFrame<2> {
+// TODO // Configure framesize at crate level?
+impl<'a> Response<'a> {
+    pub fn to_frame(&self) -> ha::MsgFrame {
         match self {
             Self::Good => {
                 ha::MsgFrame {
@@ -164,9 +158,32 @@ impl Response {
             }
 
             Self::GpioValue(idx, value) => {
-                ha::MsgFrame::<2> {
+                ha::MsgFrame {
                     code: ha::Code::GpioValue,
                     data: Vec::from_slice(&[*idx, value.to_u8()]).unwrap()
+                }
+            }
+
+            Self::GpioDir(idx, value) => {
+                ha::MsgFrame {
+                    code: ha::Code::GpioDir,
+                    data: Vec::from_slice(&[*idx, value.to_u8()]).unwrap()
+                }
+            }
+            
+            ///////////////////////////////////
+            
+            Self::ErrInvalidArgs => {
+                ha::MsgFrame {
+                    code: ha::Code::ErrInvalidArgs,
+                    data: Vec::new()
+                }
+            }
+
+            Self::ErrGeneric(reason) => {
+                ha::MsgFrame {
+                    code: ha::Code::ErrGeneric,
+                    data: Vec::from_slice(reason.as_bytes()).unwrap(),
                 }
             }
         }
