@@ -15,6 +15,12 @@ pub struct SlipError {
     pub code: SlipErrorCode,
 }
 
+impl From<SlipErrorCode> for SlipError {
+    fn from(err: SlipErrorCode) -> Self {
+        Self {pos: 0, code: err}
+    }
+}
+
 pub struct BasicBuffer<const CAPACITY: usize> {
     idx: usize,
     buf: [u8; CAPACITY],

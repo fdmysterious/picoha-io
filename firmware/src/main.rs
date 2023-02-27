@@ -43,7 +43,7 @@ use heapless::Vec;
 mod platform;
 mod application;
 
-use protocols::{self, slip::{Decoder, Encoder}};
+use protocols::{self, slip::{Decoder, Encoder, SlipError}};
 
 // ============================================================================
 
@@ -163,20 +163,17 @@ fn main() -> ! {
                                     };
 
                                     // Try encode frame
-                                    match encoder.feed(&response_frame.code.to_u16().to_be_bytes()) {
-                                        Ok(_) => match encoder.feed(&response_frame.data.as_slice()) {
-                                            Ok(_) => match encoder.feed(&response_frame.crc().to_be_bytes()) {
-                                                Ok(_) => match encoder.finish() {
-                                                    Ok(_) => { usb_serial.write(encoder.slice()); },
-                                                    Err(_) => {}
-                                                }
+                                    fn _build_response<const BUFLEN: usize>(ff: &protocols::ha::MsgFrame, encoder: &mut Encoder<BUFLEN>) -> Result<(), SlipError> {
+                                        encoder.feed(ff.code.to_u16().to_be_bytes().as_slice())?;
+                                        encoder.feed(ff.data.as_slice())?;
+                                        encoder.feed(ff.crc().to_be_bytes().as_slice())?;
+                                        encoder.finish()?;
 
-                                                Err(_) => {}
-                                            },
+                                        Ok(())
+                                    }
 
-                                            Err(_) => {}
-                                        }
-
+                                    match _build_response(&response_frame, &mut encoder) {
+                                        Ok(_)  => {usb_serial.write(encoder.slice()).ok();}
                                         Err(_) => {}
                                     }
 
