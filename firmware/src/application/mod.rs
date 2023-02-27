@@ -77,15 +77,62 @@ impl PicohaIo {
     }
 
     // -----------------------------------------------------------------------
+ 
+    fn mode_arg_to_hal(mode: protocols::gpio::GpioDir) -> DynPinMode {
+        match mode {
+            protocols::gpio::GpioDir::PullUpInput    => DYN_PULL_UP_INPUT,
+            protocols::gpio::GpioDir::PullDownInput  => DYN_PULL_DOWN_INPUT,
+            protocols::gpio::GpioDir::Output         => DYN_READABLE_OUTPUT,
+        }
+    }
+
+    pub fn process_gpio(&mut self, req: gpio::Request) -> gpio::Response {
+        match req {
+            gpio::Request::GpioDirSet(idx, dir) => {
+                let dir_value = Self::mode_arg_to_hal(dir);
+                let pin = match self.gpio_ctrl.borrow(idx) {
+                    Some(x) => x,
+                    None    => {return gpio::Response::ErrInvalidArgs;}
+                };
+                
+                match pin.try_into_mode(dir_value) {
+                    Ok(_)  => gpio::Response::Good,
+                    Err(x) => gpio::Response::ErrGeneric("Cannot set into desired mode"),
+                }
+            }
+
+            gpio::Request::GpioDirGet(idx) => {
+                // TODO
+                gpio::Response::Good
+            }
+
+            gpio::Request::GpioWrite(idx, value) => {
+                let pin = match self.gpio_ctrl.borrow(idx) {
+                    Some(x) => x,
+                    None    => {return gpio::Response::ErrInvalidArgs;}
+                };
+
+                let ret = match value {
+                    gpio::GpioValue::High => pin.set_high(),
+                    gpio::GpioValue::Low  => pin.set_low()
+                };
+
+                match ret {
+                    Ok(_)  => gpio::Response::Good,
+                    Err(_) => gpio::Response::ErrGeneric("Cannot set desired value")
+                }
+            }
+
+            gpio::Request::GpioRead(idx) => {
+                // TODO
+                gpio::Response::Good
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
 
     // Converts the mode argument to the hal mode constant
-    //fn mode_arg_to_hal(mode: protocols::gpio::GpioDir) -> DynPinMode {
-    //    match mode {
-    //        protocols::gpio::GpioDir::PullUpInput    => DYN_PULL_UP_INPUT,
-    //        protocols::gpio::GpioDir::PullDownInput  => DYN_PULL_DOWN_INPUT,
-    //        protocols::gpio::GpioDir::ReadableOutput => DYN_READABLE_OUTPUT,
-    //    }
-    //}
 
     //fn cmd_pin_set_io(io: &mut DynPin, mode: protocols::gpio::GpioDir) {
     //}

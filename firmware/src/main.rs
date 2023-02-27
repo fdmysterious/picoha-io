@@ -137,13 +137,20 @@ fn main() -> ! {
                                 idx += nbytes;
 
                                 if is_end {
-                                    fn _process_slice(app: &application::PicohaIo, slice: &[u8]) -> Result<protocols::ha::MsgFrame, protocols::ha::MsgError> {
+                                    fn _process_slice(app: &mut application::PicohaIo, slice: &[u8]) -> Result<protocols::ha::MsgFrame, protocols::ha::MsgError> {
                                         let req_frame = protocols::ha::MsgFrame::from_slice(slice)?;
                                         
                                         match protocols::ha::CodeCategory::categorize(&req_frame.code) {
                                             protocols::ha::CodeCategory::ReqGeneric => {
                                                 let req  = protocols::common::Request::consume_frame(req_frame)?;
                                                 let resp = app.process_generic(req);
+
+                                                Ok(resp.to_frame())
+                                            }
+
+                                            protocols::ha::CodeCategory::ReqGpio => {
+                                                let req  = protocols::gpio::Request::consume_frame(req_frame)?;
+                                                let resp = app.process_gpio(req);
 
                                                 Ok(resp.to_frame())
                                             }
@@ -155,7 +162,7 @@ fn main() -> ! {
 
                                     // Get and process incoming slice
                                     let slice          = decoder.slice();
-                                    let response_frame = match _process_slice(&app, &slice){
+                                    let response_frame = match _process_slice(&mut app, &slice){
                                         Ok(frame) => frame,
                                         Err(exc)  => {
                                             exc.to_frame()
