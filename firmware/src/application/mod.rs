@@ -88,6 +88,15 @@ impl PicohaIo {
         }
     }
 
+    fn hal_arg_to_mode(hal: DynPinMode) -> Option<protocols::gpio::GpioDir> {
+        match hal {
+            DYN_PULL_UP_INPUT   => Some(protocols::gpio::GpioDir::PullUpInput),
+            DYN_PULL_DOWN_INPUT => Some(protocols::gpio::GpioDir::PullDownInput),
+            DYN_READABLE_OUTPUT => Some(protocols::gpio::GpioDir::Output),
+            _                   => None
+        }
+    }
+
     pub fn process_gpio(&mut self, req: gpio::Request) -> gpio::Response {
         match req {
             gpio::Request::GpioDirSet(idx, dir) => {
@@ -104,8 +113,15 @@ impl PicohaIo {
             }
 
             gpio::Request::GpioDirGet(idx) => {
-                // TODO
-                gpio::Response::Good
+                let pin = match self.gpio_ctrl.borrow(idx) {
+                    Some(x) => x,
+                    None    => {return gpio::Response::ErrInvalidArgs;}
+                };
+
+                match Self::hal_arg_to_mode(pin.mode()) {
+                    Some(x) => gpio::Response::GpioDir(idx, x),
+                    None    => gpio::Response::ErrGeneric("Uknown pin direction")
+                }
             }
 
             gpio::Request::GpioWrite(idx, value) => {
@@ -126,8 +142,17 @@ impl PicohaIo {
             }
 
             gpio::Request::GpioRead(idx) => {
-                // TODO
-                gpio::Response::Good
+                let pin = match self.gpio_ctrl.borrow(idx) {
+                    Some(x) => x,
+                    None    => {return gpio::Response::ErrInvalidArgs;}
+                };
+
+                let value = match pin.is_high() {
+                    Ok(x)  => if x {protocols::gpio::GpioValue::High} else {protocols::gpio::GpioValue::Low},
+                    Err(_) => {return gpio::Response::ErrGeneric("Error reading pin");}
+                };
+
+                gpio::Response::GpioValue(idx, value)
             }
         }
     }
