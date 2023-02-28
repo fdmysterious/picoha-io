@@ -42,6 +42,7 @@ serde_repr = "0.1.9"
 base64 = { version = "0.13.0", default-features = false }
 
 protocols = {path="libs/protocols"}
+const-random = "0.1.15"
 
 [features]
 boot2 = ["rp2040-boot2"]
