@@ -25,7 +25,12 @@ use const_random::const_random;
 
 // ============================================================================
 
+#[cfg(debug_assertions)]
+const VERSION: &str = env!("GIT_HASH");
+
+#[cfg(not(debug_assertions))]
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 const ID: [u8;8]    = const_random!([u8;8]);
 
 // ============================================================================
